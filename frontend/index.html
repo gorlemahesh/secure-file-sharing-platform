@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Secure File Sharing Platform</title>
+</head>
+<body>
+  <h1>Secure File Sharing Platform</h1>
+  <button id="loginBtn">Login with Cognito</button>
+
+  <script src="config.js"></script>
+<script>
+document.getElementById("loginBtn").addEventListener("click", () => {
+  const loginUrl =
+    `${CONFIG.cognitoDomain}/oauth2/authorize?response_type=token` +
+    `&client_id=${CONFIG.clientId}` +
+    `&redirect_uri=${encodeURIComponent("http://localhost:8000/dashboard.html")}` +
+    `&scope=openid+email+profile`;
+
+  window.location.href = loginUrl;
+});
+</script>
+</body>
+</html>

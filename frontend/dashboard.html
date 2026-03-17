@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dashboard</title>
+
+  <script>
+    function captureToken() {
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+      const idToken = params.get("id_token");
+
+      if (idToken) {
+        localStorage.setItem("id_token", idToken);
+        history.replaceState(null, "", window.location.pathname);
+      }
+    }
+
+    captureToken();
+  </script>
+</head>
+
+<body>
+  <h1>File Dashboard</h1>
+
+  <button onclick="logout()">Logout</button>
+
+  <h2>Upload Files</h2>
+  <input type="file" id="fileInput" multiple onchange="previewFiles()" />
+  <button onclick="uploadFile()">Upload</button>
+
+  <h3>Selected Files</h3>
+  <ul id="selectedFileList"></ul>
+
+  <h2>My Files</h2>
+  <button onclick="loadFiles()">Refresh Files</button>
+  <ul id="fileList"></ul>
+
+  <script src="config.js"></script>
+  <script src="script.js"></script>
+
+  <script>
+    window.onload = function () {
+      if (!localStorage.getItem("id_token")) {
+        window.location.href = "index.html";
+        return;
+      }
+
+      loadFiles();
+    };
+  </script>
+</body>
+</html>
