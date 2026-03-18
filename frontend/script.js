@@ -1,32 +1,20 @@
+const CONFIG = window.APP_CONFIG;
+
 let selectedFiles = [];
+let uploadMode = CONFIG.UPLOAD_MODES.FILES;
 
-function getIdToken() {
-  const hash = window.location.hash.substring(1);
-  const params = new URLSearchParams(hash);
-  return params.get("id_token") || localStorage.getItem("id_token");
+function buildUrl(path) {
+  return `${CONFIG.API_BASE_URL}${path}`;
 }
 
-function saveToken() {
-  const token = getIdToken();
-  if (token) {
-    localStorage.setItem("id_token", token);
-    if (window.location.hash) {
-      history.replaceState(null, "", window.location.pathname);
-    }
-  }
+function getToken() {
+  return localStorage.getItem("id_token");
 }
 
-function getAuthHeaders(isJson = true) {
-  const token = localStorage.getItem("id_token");
-  const headers = {
-    Authorization: `Bearer ${token}`
-  };
-
-  if (isJson) {
-    headers["Content-Type"] = "application/json";
-  }
-
-  return headers;
+function headers(json = true) {
+  const h = { Authorization: `Bearer ${getToken()}` };
+  if (json) h["Content-Type"] = "application/json";
+  return h;
 }
 
 function logout() {
@@ -34,205 +22,279 @@ function logout() {
   window.location.href = "index.html";
 }
 
-function previewFiles() {
-  const fileInput = document.getElementById("fileInput");
-  const files = Array.from(fileInput.files || []);
-
-  selectedFiles = [...selectedFiles, ...files];
+function setUploadMode(mode) {
+  uploadMode = mode;
+  selectedFiles = [];
   renderPreview();
 
-  // clear input so same file can be re-selected later if needed
-  fileInput.value = "";
+  document.getElementById("fileUploadSection").style.display =
+    mode === CONFIG.UPLOAD_MODES.FILES ? "block" : "none";
+
+  document.getElementById("folderUploadSection").style.display =
+    mode === CONFIG.UPLOAD_MODES.FOLDER ? "block" : "none";
+
+  const fileInput = document.getElementById("fileInput");
+  const folderInput = document.getElementById("folderInput");
+  if (fileInput) fileInput.value = "";
+  if (folderInput) folderInput.value = "";
+}
+
+function previewFiles() {
+  const files = Array.from(document.getElementById("fileInput").files || []);
+  selectedFiles = files.map(f => ({
+    file: f,
+    displayName: f.name,
+    relativePath: f.name
+  }));
+  renderPreview();
+  updatePreviewCount();
+}
+
+function previewFolder() {
+  const files = Array.from(document.getElementById("folderInput").files || []);
+  selectedFiles = files.map(f => ({
+    file: f,
+    displayName: f.webkitRelativePath || f.name,
+    relativePath: f.webkitRelativePath || f.name
+  }));
+  renderPreview();
+  updatePreviewCount();
 }
 
 function renderPreview() {
-  const selectedFileList = document.getElementById("selectedFileList");
-  selectedFileList.innerHTML = "";
+  const list = document.getElementById("selectedFileList");
+  list.innerHTML = "";
 
-  if (selectedFiles.length === 0) {
-    selectedFileList.innerHTML = "<li>No files selected</li>";
+  if (!selectedFiles.length) {
+    list.innerHTML = `<li class="empty-state">${CONFIG.DEFAULTS.EMPTY_SELECTION}</li>`;
+    updatePreviewCount();
     return;
   }
 
-  selectedFiles.forEach((file, index) => {
+  selectedFiles.forEach((item, i) => {
     const li = document.createElement("li");
-    const fileSizeKB = (file.size / 1024).toFixed(2);
-
+    li.className = "preview-item";
     li.innerHTML = `
-  <span>${file.name} (${fileSizeKB} KB)</span>
-  <button onclick="removeFile(${index})" style="margin-left:10px;color:red;">Remove</button>
-`;
-
-    selectedFileList.appendChild(li);
+      <div class="preview-item-left">
+        <div class="preview-name">${escapeHtml(item.displayName)}</div>
+        <div class="preview-meta">${formatFileSize(item.file.size)}</div>
+      </div>
+      <button class="preview-remove-btn" onclick="removeFile(${i})">Remove</button>
+    `;
+    list.appendChild(li);
   });
+
+  updatePreviewCount();
 }
 
-function removeFile(index) {
-  selectedFiles.splice(index, 1);
+function updatePreviewCount() {
+  const el = document.getElementById("previewCount");
+  if (!el) return;
+  el.textContent = `${selectedFiles.length} item${selectedFiles.length === 1 ? "" : "s"}`;
+}
+
+function removeFile(i) {
+  selectedFiles.splice(i, 1);
   renderPreview();
 }
 
-async function uploadSingleFile(file) {
-  const response = await fetch(`${CONFIG.apiBaseUrl}/upload_url`, {
-    method: "POST",
-    headers: getAuthHeaders(true),
-    body: JSON.stringify({
-      fileName: file.name,
-      contentType: file.type || "application/octet-stream"
-    })
-  });
+function formatFileSize(bytes) {
+  if (!bytes && bytes !== 0) return "";
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(2)} KB`;
+  return `${(kb / 1024).toFixed(2)} MB`;
+}
 
-  const data = await response.json();
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
 
-  if (!response.ok) {
-    throw new Error(data.error || `Failed to generate upload URL for ${file.name}`);
-  }
+function expiry() {
+  return (
+    (+expiryDays.value * 86400) +
+    (+expiryHours.value * 3600) +
+    (+expiryMinutes.value * 60)
+  );
+}
 
-  const uploadResponse = await fetch(data.uploadUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": file.type || "application/octet-stream"
-    },
-    body: file
-  });
-
-  if (!uploadResponse.ok) {
-    throw new Error(`Failed to upload ${file.name} to S3`);
-  }
-
-  return {
-    fileName: file.name,
-    fileId: data.fileId,
-    s3Key: data.s3Key
-  };
+function folderCode() {
+  return crypto.randomUUID().slice(0, 10);
 }
 
 async function uploadFile() {
-  if (selectedFiles.length === 0) {
-    alert("Please select at least one file");
-    return;
-  }
+  if (!selectedFiles.length) return alert("Select files or a folder");
 
-  const uploadButton = document.querySelector('button[onclick="uploadFile()"]');
-  const originalButtonText = uploadButton.textContent;
+  const code = uploadMode === CONFIG.UPLOAD_MODES.FOLDER ? folderCode() : "";
+  const uploadButton = document.querySelector(".primary-btn");
+  const originalText = uploadButton.textContent;
   uploadButton.disabled = true;
   uploadButton.textContent = "Uploading...";
 
-  const successFiles = [];
-  const failedFiles = [];
+  try {
+    for (const item of selectedFiles) {
+      const res = await fetch(buildUrl(CONFIG.ROUTES.UPLOAD), {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          fileName: item.file.name,
+          contentType: item.file.type || "application/octet-stream",
+          expirySeconds: expiry(),
+          folder: folderNameInput.value,
+          relativePath: item.relativePath,
+          uploadMode,
+          folderShareCode: code
+        })
+      });
 
-  for (const file of selectedFiles) {
-    try {
-      await uploadSingleFile(file);
-      successFiles.push(file.name);
-    } catch (error) {
-      failedFiles.push(`${file.name}: ${error.message}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to generate upload link");
+      }
+
+      const putRes = await fetch(data.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": item.file.type || "application/octet-stream" },
+        body: item.file
+      });
+
+      if (!putRes.ok) {
+        throw new Error(`Failed to upload ${item.file.name}`);
+      }
     }
+
+    if (uploadMode === CONFIG.UPLOAD_MODES.FOLDER) {
+      const link = `${buildUrl(CONFIG.ROUTES.SHARE_FOLDER)}/${code}`;
+      await navigator.clipboard.writeText(link);
+      alert("Folder link copied");
+    } else {
+      alert("Upload completed");
+    }
+
+    selectedFiles = [];
+    renderPreview();
+    loadFiles();
+  } catch (error) {
+    alert(error.message || "Upload failed");
+  } finally {
+    uploadButton.disabled = false;
+    uploadButton.textContent = originalText;
   }
+}
 
-  uploadButton.disabled = false;
-  uploadButton.textContent = originalButtonText;
+function groupItems(files) {
+  const groupedFolders = {};
+  const individualFiles = [];
 
-  if (successFiles.length > 0 && failedFiles.length === 0) {
-    alert(`${successFiles.length} file(s) uploaded successfully`);
-  } else if (successFiles.length > 0 && failedFiles.length > 0) {
-    alert(
-      `${successFiles.length} file(s) uploaded successfully.\n\nFailed uploads:\n${failedFiles.join("\n")}`
-    );
-  } else {
-    alert(`All uploads failed.\n\n${failedFiles.join("\n")}`);
-  }
+  files.forEach(file => {
+    if (file.uploadMode === CONFIG.UPLOAD_MODES.FOLDER && file.folderShareCode) {
+      if (!groupedFolders[file.folderShareCode]) {
+        groupedFolders[file.folderShareCode] = {
+          folderShareCode: file.folderShareCode,
+          folder: file.folder || CONFIG.DEFAULTS.UPLOAD_FOLDER_LABEL,
+          items: []
+        };
+      }
+      groupedFolders[file.folderShareCode].items.push(file);
+    } else {
+      individualFiles.push(file);
+    }
+  });
 
-  selectedFiles = [];
-  renderPreview();
-  loadFiles();
+  return {
+    folders: Object.values(groupedFolders),
+    files: individualFiles
+  };
 }
 
 async function loadFiles() {
-  const response = await fetch(`${CONFIG.apiBaseUrl}/files`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("id_token")}`
-    }
+  const res = await fetch(buildUrl(CONFIG.ROUTES.FILES), {
+    headers: headers(false)
   });
 
-  const data = await response.json();
-  const fileList = document.getElementById("fileList");
-  fileList.innerHTML = "";
+  const data = await res.json();
+  const list = document.getElementById("fileList");
+  list.innerHTML = "";
 
-  if (!response.ok) {
-    alert(data.error || "Failed to fetch files");
+  if (!res.ok) {
+    list.innerHTML = `<li class="empty-state">Failed to load items</li>`;
     return;
   }
 
-  if (!data.files || data.files.length === 0) {
-    fileList.innerHTML = "<li>No files uploaded yet.</li>";
+  if (!(data.files || []).length) {
+    list.innerHTML = `<li class="empty-state">${CONFIG.DEFAULTS.EMPTY_FILES}</li>`;
     return;
   }
 
-  data.files.forEach(file => {
+  const grouped = groupItems(data.files);
+
+  grouped.folders.forEach(folderGroup => {
     const li = document.createElement("li");
+    li.className = "file-row folder-row";
     li.innerHTML = `
-      <strong>${file.fileName}</strong>
-      <button onclick="copyDownloadLink('${file.fileId}', this)">Copy Link</button>
-      <button onclick="deleteFile('${file.fileId}')">Delete</button>
+      <div class="file-row-left">
+        <div class="file-title">📁 ${escapeHtml(folderGroup.folder)}</div>
+        <div class="file-subtitle">${folderGroup.items.length} file(s)</div>
+      </div>
+      <div class="file-row-right">
+        <button class="file-action-btn" onclick="copyFolderLink('${folderGroup.folderShareCode}', this)">Copy Folder Link</button>
+      </div>
     `;
-    fileList.appendChild(li);
+    list.appendChild(li);
+  });
+
+  grouped.files.forEach(file => {
+    const li = document.createElement("li");
+    li.className = "file-row";
+    li.innerHTML = `
+      <div class="file-row-left">
+        <div class="file-title">${escapeHtml(file.fileName)}</div>
+        <div class="file-subtitle">${file.folder ? `Folder: ${escapeHtml(file.folder)}` : "Standalone file"}</div>
+      </div>
+      <div class="file-row-right">
+        <button class="file-action-btn" onclick="copyFileLink('${file.shortCode}', this)">Copy File Link</button>
+        <button class="delete-btn" onclick="del('${file.fileId}')">Delete</button>
+      </div>
+    `;
+    list.appendChild(li);
   });
 }
 
-async function copyDownloadLink(fileId, buttonElement) {
-  const response = await fetch(`${CONFIG.apiBaseUrl}/download_url`, {
-    method: "POST",
-    headers: getAuthHeaders(true),
-    body: JSON.stringify({ fileId })
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    alert(data.error || "Failed to generate download URL");
-    return;
-  }
-
-  try {
-    await navigator.clipboard.writeText(data.downloadUrl);
-    const originalText = buttonElement.textContent;
-    buttonElement.textContent = "Copied!";
-    setTimeout(() => {
-      buttonElement.textContent = originalText;
-    }, 2000);
-  } catch (error) {
-    alert("Failed to copy link");
-  }
+async function copy(text, button) {
+  await navigator.clipboard.writeText(text);
+  const original = button.textContent;
+  button.textContent = "Copied!";
+  setTimeout(() => {
+    button.textContent = original;
+  }, 2000);
 }
 
-async function deleteFile(fileId) {
-  const response = await fetch(`${CONFIG.apiBaseUrl}/file`, {
+async function copyFileLink(code, button) {
+  const link = `${buildUrl(CONFIG.ROUTES.SHARE_FILE)}/${code}`;
+  await copy(link, button);
+}
+
+async function copyFolderLink(code, button) {
+  const link = `${buildUrl(CONFIG.ROUTES.SHARE_FOLDER)}/${code}`;
+  await copy(link, button);
+}
+
+async function del(id) {
+  await fetch(buildUrl(CONFIG.ROUTES.DELETE_FILE), {
     method: "DELETE",
-    headers: getAuthHeaders(true),
-    body: JSON.stringify({ fileId })
+    headers: headers(),
+    body: JSON.stringify({ fileId: id })
   });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    alert(data.error || "Failed to delete file");
-    return;
-  }
-
-  alert("File deleted successfully");
   loadFiles();
 }
 
-window.onload = function () {
-  saveToken();
-
-  if (!localStorage.getItem("id_token")) {
-    window.location.href = "index.html";
-    return;
-  }
-
+window.onload = () => {
+  if (!getToken()) location.href = "index.html";
   renderPreview();
   loadFiles();
 };

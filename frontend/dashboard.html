@@ -2,9 +2,10 @@
 <html>
 <head>
   <title>Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
 
   <script>
-    function captureToken() {
+    (function () {
       const hash = window.location.hash.substring(1);
       const params = new URLSearchParams(hash);
       const idToken = params.get("id_token");
@@ -13,40 +14,131 @@
         localStorage.setItem("id_token", idToken);
         history.replaceState(null, "", window.location.pathname);
       }
-    }
-
-    captureToken();
+    })();
   </script>
 </head>
 
 <body>
-  <h1>File Dashboard</h1>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-badge">SF</div>
+        <div>
+          <h1 class="brand-title">Secure Files</h1>
+          <p class="brand-subtitle">Cloud sharing dashboard</p>
+        </div>
+      </div>
 
-  <button onclick="logout()">Logout</button>
+      <div class="sidebar-card">
+        <p class="sidebar-label">Upload Mode</p>
+        <div class="mode-toggle">
+          <label class="mode-option">
+            <input type="radio" name="mode" checked onchange="setUploadMode(APP_CONFIG.UPLOAD_MODES.FILES)" />
+            <span>Files</span>
+          </label>
 
-  <h2>Upload Files</h2>
-  <input type="file" id="fileInput" multiple onchange="previewFiles()" />
-  <button onclick="uploadFile()">Upload</button>
+          <label class="mode-option">
+            <input type="radio" name="mode" onchange="setUploadMode(APP_CONFIG.UPLOAD_MODES.FOLDER)" />
+            <span>Folder</span>
+          </label>
+        </div>
+      </div>
 
-  <h3>Selected Files</h3>
-  <ul id="selectedFileList"></ul>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </aside>
 
-  <h2>My Files</h2>
-  <button onclick="loadFiles()">Refresh Files</button>
-  <ul id="fileList"></ul>
+    <main class="main-content">
+      <section class="hero-card">
+        <div>
+          <p class="eyebrow">Workspace</p>
+          <h2 class="hero-title">Manage uploads, links, and shared folders</h2>
+          <p class="hero-text">Upload files securely, create shareable links, and keep everything organized in one place.</p>
+        </div>
+      </section>
+
+      <section class="grid-layout">
+        <div class="card upload-card">
+          <div class="card-header">
+            <div>
+              <p class="card-eyebrow">Uploader</p>
+              <h3 class="card-title">Add files or folders</h3>
+            </div>
+          </div>
+
+          <div id="fileUploadSection" class="upload-zone">
+            <label class="upload-dropzone">
+              <input type="file" id="fileInput" multiple onchange="previewFiles()" />
+              <span class="upload-icon">↑</span>
+              <span class="upload-main-text">Choose files</span>
+              <span class="upload-sub-text">Select one or more files to upload</span>
+            </label>
+          </div>
+
+          <div id="folderUploadSection" class="upload-zone" style="display:none;">
+            <label class="upload-dropzone">
+              <input type="file" id="folderInput" webkitdirectory multiple onchange="previewFolder()" />
+              <span class="upload-icon">📁</span>
+              <span class="upload-main-text">Choose folder</span>
+              <span class="upload-sub-text">Upload a complete folder structure</span>
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <div class="field-group">
+              <label for="folderNameInput">Folder Name</label>
+              <input id="folderNameInput" placeholder="Optional folder name" />
+            </div>
+
+            <div class="field-group expiry-grid">
+              <div>
+                <label for="expiryDays">Days</label>
+                <input id="expiryDays" type="number" value="0" min="0" />
+              </div>
+              <div>
+                <label for="expiryHours">Hours</label>
+                <input id="expiryHours" type="number" value="1" min="0" />
+              </div>
+              <div>
+                <label for="expiryMinutes">Minutes</label>
+                <input id="expiryMinutes" type="number" value="0" min="0" />
+              </div>
+            </div>
+          </div>
+
+          <button class="primary-btn" onclick="uploadFile()">Upload</button>
+
+          <div class="preview-panel">
+            <div class="panel-header">
+              <h4>Preview</h4>
+              <span class="panel-count" id="previewCount">0 items</span>
+            </div>
+            <ul id="selectedFileList" class="preview-list"></ul>
+          </div>
+        </div>
+
+        <div class="card files-card">
+          <div class="card-header">
+            <div>
+              <p class="card-eyebrow">Library</p>
+              <h3 class="card-title">My items</h3>
+            </div>
+            <button class="secondary-btn" onclick="loadFiles()">Refresh</button>
+          </div>
+
+          <ul id="fileList" class="file-list"></ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    window.__APP_API_BASE_URL__ = "https://pwdnjn8eoc.execute-api.us-east-1.amazonaws.com/dev";
+    window.__APP_COGNITO_DOMAIN__ = "https://us-east-1pk0uc9bpp.auth.us-east-1.amazoncognito.com";
+    window.__APP_CLIENT_ID__ = "4a0ur20sutji38tg203lnbvvfn";
+    window.__APP_REDIRECT_PATH__ = "/dashboard.html";
+  </script>
 
   <script src="config.js"></script>
   <script src="script.js"></script>
-
-  <script>
-    window.onload = function () {
-      if (!localStorage.getItem("id_token")) {
-        window.location.href = "index.html";
-        return;
-      }
-
-      loadFiles();
-    };
-  </script>
 </body>
 </html>

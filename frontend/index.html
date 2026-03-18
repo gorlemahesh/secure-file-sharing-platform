@@ -2,22 +2,36 @@
 <html>
 <head>
   <title>Secure File Sharing Platform</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <h1>Secure File Sharing Platform</h1>
-  <button id="loginBtn">Login with Cognito</button>
+
+  <div class="container">
+    <h1>Secure File Sharing Platform</h1>
+    <button id="loginBtn">Login with Cognito</button>
+  </div>
+
+  <!--  ONLY PLACE YOU CONFIGURE -->
+  <script>
+    window.__APP_API_BASE_URL__ = "https://pwdnjn8eoc.execute-api.us-east-1.amazonaws.com/dev";
+    window.__APP_COGNITO_DOMAIN__ = "https://us-east-1pk0uc9bpp.auth.us-east-1.amazoncognito.com";
+    window.__APP_CLIENT_ID__ = "4a0ur20sutji38tg203lnbvvfn";
+    window.__APP_REDIRECT_PATH__ = "/dashboard.html";
+  </script>
 
   <script src="config.js"></script>
-<script>
-document.getElementById("loginBtn").addEventListener("click", () => {
-  const loginUrl =
-    `${CONFIG.cognitoDomain}/oauth2/authorize?response_type=token` +
-    `&client_id=${CONFIG.clientId}` +
-    `&redirect_uri=${encodeURIComponent("http://localhost:8000/dashboard.html")}` +
-    `&scope=openid+email+profile`;
 
-  window.location.href = loginUrl;
-});
-</script>
+  <script>
+    document.getElementById("loginBtn").addEventListener("click", () => {
+      const url =
+        `${APP_CONFIG.COGNITO_DOMAIN}/oauth2/authorize?response_type=token` +
+        `&client_id=${APP_CONFIG.CLIENT_ID}` +
+        `&redirect_uri=${encodeURIComponent(APP_CONFIG.REDIRECT_URI)}` +
+        `&scope=openid+email+profile`;
+
+      window.location.href = url;
+    });
+  </script>
+
 </body>
 </html>
